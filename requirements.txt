@@ -1,0 +1,12 @@
+gTTS==2.3.1
+soundfile~=0.12.1
+langchain~=0.0.233
+openai_whisper==20230314
+paho_mqtt==1.6.1
+pandas==1.5.3
+PyAudio==0.2.13
+pydub==0.25.1
+pyperclip==1.8.2
+SpeechRecognition==3.10.0
+whisper==1.1.10
+guidance~=0.0.64
