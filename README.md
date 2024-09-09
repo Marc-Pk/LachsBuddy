@@ -1,3 +1,6 @@
+# Notice
+**This is a project from 2023 which is not actively maintained right now.**
+
 # LachsBuddy 🐟
 LachsBuddy is a conversational chatbot that allows you to converse with large language models (LLMs) using either voice or text. 
 
