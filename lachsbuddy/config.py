@@ -2,8 +2,23 @@
 # Usually, setting both to 1 will be valid default values.
 # try other indices from the provided list if you have multiple input/output devices.
 # When first running the program, you will get a list of indices.
-INPUT_DEVICE_INDEX = 2
+INPUT_DEVICE_INDEX = 3
 OUTPUT_DEVICE_INDEX = 1
+
+# Set the names of the AI and the user
+YOUR_NAME = "Marc"
+CHAR_NAME = "Assistant"
+
+# Describe the setting to the LLM
+SYSTEM_PROMPT = "The following is a conversation between a human and an AI friend. You are the AI friend and respond like a humorous and friendly human. The human input may have transcription errors and require correction."
+
+def PROMPT_FORMAT(tools=""):
+    return f"""Format all of your output as json and strictly stick to the following variable names and structure. If a variable doesn't apply or is unclear/unknown, set it as NA.
+{{
+"response": Your response to {YOUR_NAME}. If using a tool, briefly explain what you will do. You must strictly stay in character.",
+"tool": "required tool for the action (if any, must be one of {[tool.name for tool in tools]}",
+"tool_input": "instructions for the tool task (if any)"
+}}"""
 
 # sets the default human input mode
 # "voice": use speech as input
@@ -14,36 +29,39 @@ INPUT_MODE = "voice"
 # If false, the answer will be returned directly.
 CONFIRM_SEND = False
 
-# Whether chatter in inactive mode will also be recorded in the database.
-LOG_CHATTER = True
+# Whether chatter in inactive mode will also be recorded in the database. Currently not supported!
+LOG_CHATTER = False
 
 # Whether to output AI responses as sound
 PLAY_SOUND = True
 
 # text to speech model for the AI audio output
 # "silero" - fast and relatively accurate local model, recommended. The only fully compatible option with the script atm!
+# "silero-server" - experimental model that is hosted on a server and can be accessed via an API. 
 # "gtts" - standard robotic but accurate voice you hear using Google products
-# "bark" - experimental model that may confabulate the output to an extent and is not very accurate
-TTS_MODEL = "silero"
+TTS_MODEL = "silero-server"
 
+# TODO: use snowboy for hotword detection!
 # words to active and exit the active mode
 HOTWORD = "activate"
 ENDWORD = "exit"
 
 # STT engine to use
 # "whisper" - local model loaded explicitly
-# "whisper-api" - model loded via OpenAI-compatible API, can also be provided locally
+# "distil-whisper" - local Whisper-derivate, significantly faster. English only.
 # "silero" - local model loaded via torch.hub, not recommended
-STT_MODEL_TYPE = "whisper"
+STT_MODEL_TYPE = "distil-whisper"
 
 # Whisper model to use 
 # check https://github.com/openai/whisper#available-models-and-languages for available models
 # .en models only recognize English output, can be faster
-STT_MODEL = "base.en"
+if STT_MODEL_TYPE == "whisper":
+    STT_MODEL = "small.en"
+elif STT_MODEL_TYPE == "distil-whisper":
+    STT_MODEL = "distil-whisper"
 
 # LLM to use. 
 # "local-openai" - a local model accessed via a local OpenAI-compatible API
-# "bard" - Bard API - will likely be removed!
 # an OpenAI model, such as "gpt-3.5-turbo" (=ChatGPT)
 LLM_NAME = "local-openai"
 
@@ -55,19 +73,9 @@ LANGUAGE_SHORT = "en"
 # set the number of previous steps to store in the conversation history
 HISTORY_STEPS = 200
 
-# emotions that should be distinguishable
-EMOTION_LIST = ["neutral", "happiness", "fear", "anger", "surprise", "disgust", "sadness"]
-
-VALID_VARIABLE_KEYS = ['human_input', 'human_emotion', 'reaction_emotion', 'intent', 'action', 'tool', 'tool_input',
-                           'response', 'entities']
-
-# Max tries for fixing the output parsing
-LLM_PARSER_MAX_RETRIES = 0
-
-# Whether to strart in the inactive mode, requiring you to activate the AI using the hotword
+# Whether to start in the inactive mode, requiring you to activate the AI using the hotword.
 START_INACTIVE = False
 
-########### MQTT
 # Whether to use MQTT for I/O on another device.
 # If you choose mqtt mode, you will also need to pick BROKER_ADDRESS and BROKER_PORT further down.
 MQTT_MIC = False
@@ -78,10 +86,10 @@ MQTT_SPEAKER = False
 BROKER_ADDRESS = "localhost"
 BROKER_PORT = 1883  # Standard MQTT port
 
-########### Technical stuff, probably irrelevant for most users
+# address to host models
+MODEL_HOSTING_ADDRESS = "localhost:5042"
 
 # Define colors for printing
-
 import os
 os.system("")
 

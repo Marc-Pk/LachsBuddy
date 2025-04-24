@@ -8,6 +8,7 @@ from llm import *
 import config
 import traceback
 import json
+from pydantic import BaseModel
 
 
 def check_config():
@@ -41,15 +42,11 @@ def check_config():
         errors.append(
             "keys.py: Please provide a valid OpenAI key or alternatively a dummy for a local OpenAI-compatible API as well as a base_url where the API is hosted.")
 
-    if BARD_API_KEY == "" and config.LLM_NAME == "bard":
-        errors.append(
-            "keys.py: Please provide a valid Bard API key or use an OpenAI-compatible API instead by changing the LLM_NAME in config.py and providing a key/base_url in keys.py.")
-
     if len(errors) > 0:
         raise Exception('\n'.join(errors))
 
 
-def get_llm_response(llm, transcribed_text, prompt, confirm_send=config.CONFIRM_SEND):
+def get_llm_response(llm, prompt, transcribed_text, confirm_send=config.CONFIRM_SEND):
     ''' This function gets the response from the language model based on the input prompt and the mode set in the config.py file.
     Returns raw llm output and the parsed output dict
     It takes in the following parameters:
@@ -61,10 +58,6 @@ def get_llm_response(llm, transcribed_text, prompt, confirm_send=config.CONFIRM_
     confirm_send: A boolean value that indicates whether to confirm before sending the text to the language model or not.
     If set to True, the function prompts the user to confirm whether they want to send the transcribed text to the language model or not.
     If confirm_send is False, the function directly sends the text to the language model and returns the response.'''
-    # manual copypasting to and from chatgpt
-    retries = 0
-
-
     # confirm to send the transcribed text before sending if desired
     if confirm_send == True:
 
@@ -79,96 +72,86 @@ def get_llm_response(llm, transcribed_text, prompt, confirm_send=config.CONFIRM_
     print(config.style.GREEN + "\nTranscribed voice input: " + transcribed_text + config.style.RESET + "\n")
     # try to get a valid response till fixed or an error is raised
     while True:
-
-        llm_output_raw = llm.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}], 
-            max_tokens=300,
-            temperature=0.7,
-            model="gpt-3.5-turbo",
-            extra_body={"grammar_string":open("./grammars/json.gbnf").read(),
-            "repetition_penalty":1.15,
-            "top_k":0.9,
-            "stopping_strings":["<|im_end|>", "}"],
-            }).choices[0].message.content
-                    
-        #print("Raw output: \n" + llm_output_raw)
+        
+        llm_output_raw = llm.predict(prompt)
+        return llm_output_raw
         # fetch a new response
-        try:
-            llm_output_dict = parse_output(llm_output_raw, prompt)
-            if llm_output_dict != "f":
-                return llm_output_dict, llm_output_raw
+        # try:
+        #     llm_output_dict = parse_output(llm_output_raw, prompt)
+        #     if llm_output_dict != "f":
+        #         return llm_output_dict, llm_output_raw
 
         # retry if parsing fails and the maximum number of retries is not reached
-        except:
-            retries += 1
-            traceback.print_exc()
-            print(f"Output parsing failed, attempt {retries}/{config.LLM_PARSER_MAX_RETRIES} to generate a new prompt.")
-
-
-def parse_output(output_raw, prompt):
-    '''
-    This function takes in the raw output string from a language model and separates it into key-value pairs as specified in valid_variable_keys.
-    Returns a dictionary containing the keys specified in valid_variable_keys and attempts to parse values for them from the output_raw string.
-    '''
-    print("raw output for formatting:\n" + output_raw)
-    # check for newline characters
-    if '\n' not in output_raw:
-        for key in config.VALID_VARIABLE_KEYS:
-            output_raw = re.sub(r'\b' + key + r'\b', '\n' + key, output_raw)
-
-    # split by newline characters
-    output_lines = output_raw.split('\n')
-
-    # create dict with all values set to None
-    output_dict = {key: "" for key in config.VALID_VARIABLE_KEYS}
-    output_dict["response"] = None
-
-    # split each of the separated lines into key/value pairs
-    for line in output_lines:
-        if '}' in line:
-            break
-        # remove trailing commas
-        if line.endswith(',\n'):
-            line = line[:-1]
-        # remove trailing commas
-        if line.endswith('"') or line.endswith("'",):
-            line = line[:-1]
-
-        # remove artifacts and match keys to specified keys
-        if any(key in line for key in config.VALID_VARIABLE_KEYS) and len(line) > 3:
-            key, value = line.replace('"', "").replace('str = ', "").replace('list = ', "").split(':')
-            key = key.strip().lower().replace(' ', '_')
-            if key in config.VALID_VARIABLE_KEYS:
-                #print("Detected key " + key + " with value "+ value)
-                output_dict[key] = value.strip() if value.strip().lower() != 'na' else ""
-
-    if output_dict["response"] != None:
-        print("Response parsed successfully")
-        return output_dict
-
-    else:
-        print("Response couldn't be parsed")
-        raise Exception("Response couldn't be parsed")
-
-        # Attempt to re-enter the output
         # except:
-        #     try:
-        #         #try to fix the output as many times as specified in the config
-        #         if retries < config.LLM_PARSER_MAX_RETRIES:
-        #             retries += 1
-        #             print(f"Attempt {retries}/{config.LLM_PARSER_MAX_RETRIES} to fix output parsing")
-        #             _, prompt_formatted = baseline_prompt(output_raw, repair_attempt=True)
-        #             #print("---------------------:\n"+ prompt_formatted+"\-----------------------------------------")
-        #             output_raw = llm.run(prompt_formatted)
-        #             print(f"\nOutput after fix {retries}: \n{output_raw}")
-        #             #time.sleep(3)
-
-        #     except:
-        #         #traceback.print_exc()
-        #         continue
+        #     traceback.print_exc()
+        #     print(f"Output parsing failed, attempting to generate a new prompt.")
 
 
-def get_human_input(listening_mode, stt_model, log_chatter=config.LOG_CHATTER):
+# def parse_output(output_raw, prompt):
+#     '''
+#     This function takes in the raw output string from a language model and separates it into key-value pairs as specified in valid_variable_keys.
+#     Returns a dictionary containing the keys specified in valid_variable_keys and attempts to parse values for them from the output_raw string.
+#     '''
+#     print("raw output for formatting:\n" + output_raw)
+
+#     VALID_VARIABLE_KEYS = ["response", "tool", "tool_input"]
+#     try:
+#         output_dict = json.loads(output_raw)
+#         #check if all of the keys are in the output
+#         if all(key in output_dict for key in VALID_VARIABLE_KEYS):
+#             print("Response parsed successfully")
+#             return output_dict
+#         else:
+#             # fill tool and tool_input with empty strings if they are missing
+#             if "response" in output_dict:
+#                 output_dict["tool"] = ""
+#                 output_dict["tool_input"] = ""
+#                 return output_dict
+#             else:
+#                 raise Exception("Missing keys in output")
+#     except:
+#         print("Couldn't json-ify output automatically, attempting to parse manually")
+#         # check for newline characters
+#         if '\n' not in output_raw:
+#             for key in VALID_VARIABLE_KEYS:
+#                 output_raw = re.sub(r'\b' + key + r'\b', '\n' + key, output_raw)
+
+#         # split by newline characters
+#         output_lines = output_raw.split('\n')
+
+#         # create dict with all values set to None
+#         output_dict = {key: "" for key in VALID_VARIABLE_KEYS}
+#         output_dict["response"] = None
+
+#         # split each of the separated lines into key/value pairs
+#         for line in output_lines:
+#             if '}' in line:
+#                 break
+#             # remove trailing commas
+#             if line.endswith(',\n'):
+#                 line = line[:-1]
+#             # remove trailing commas
+#             if line.endswith('"') or line.endswith("'",):
+#                 line = line[:-1]
+
+#             # remove artifacts and match keys to specified keys
+#             if any(key in line for key in VALID_VARIABLE_KEYS) and len(line) > 3:
+#                 key, value = line.replace('"', "").replace('str = ', "").replace('list = ', "").split(':')
+#                 key = key.strip().lower().replace(' ', '_')
+#                 if key in VALID_VARIABLE_KEYS:
+#                     #print("Detected key " + key + " with value "+ value)
+#                     output_dict[key] = value.strip() if value.strip().lower() != 'na' else ""
+
+#         if output_dict["response"] != None:
+#             print("Response parsed successfully")
+#             return output_dict
+
+#         else:
+#             print("Response couldn't be parsed")
+#             raise Exception("Response couldn't be parsed")
+
+
+def get_human_input(listening_mode, log_chatter=config.LOG_CHATTER):
     '''
     Function to get the human input as a string. Parameters:
     input_mode: "voice" or "text", specifying the input medium
@@ -181,16 +164,16 @@ def get_human_input(listening_mode, stt_model, log_chatter=config.LOG_CHATTER):
 
     #global the input mode to switch input mode permanently if the user changes it
     global input_mode
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+    
     if input_mode == "voice":
         # listen for audio input from the microphone
-        transcribed_text = listen_mic(stt_model=stt_model)
+        transcribed_text = listen_mic()
+        
 
         # switch to text input mode if the user says "text"
         if "Text." in transcribed_text:
             input_mode = "text"
-            return get_human_input(listening_mode, stt_model)
+            return get_human_input(listening_mode)
 
         # log the conversation history if logging is enabled and the listening mode is passive
         if log_chatter == True and transcribed_text != "" and listening_mode == "passive":
@@ -204,11 +187,13 @@ def get_human_input(listening_mode, stt_model, log_chatter=config.LOG_CHATTER):
         # switch to voice input mode if the user says "voice". Currently not working.
         if transcribed_text == "voice":
             input_mode = "voice"
-            return get_human_input(listening_mode, stt_model)
+            return get_human_input(listening_mode)
 
     else:
         # raise an exception if an invalid input mode is specified
         raise Exception("Invalid input mode in config.INPUT_MODE")
+    
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     return transcribed_text, timestamp
 
@@ -232,8 +217,8 @@ def run_in_background():
 
     if config.START_INACTIVE:
         # get human input
-        transcribed_text, timestamp = get_human_input(listening_mode="passive",
-                                                      stt_model=config.STT_MODEL)
+        
+        transcribed_text, timestamp = get_human_input(listening_mode="passive")
         print(config.style.BLUE + "Background chatter: " + transcribed_text + config.style.RESET)
 
     # Check if the hotword is mentioned, enable active mode in that case.
@@ -246,18 +231,23 @@ def run_in_background():
 def run_conversation():
     '''loop for the active mode. Prompts the user for input and provides a back and forth interaction with a LLM, on terms specified in the config.'''
     # initialize LLM
-    global tools, tool_descriptions, llm
+    global tools, tool_descriptions, llm#, distil_whisper, silero_tts
 
     #initialize the LLM and tools
-    llm = llm_chain(model_name=config.LLM_NAME)
+    # if config.STT_MODEL_TYPE == "distil-whisper":
+    #     distil_whisper = DistilWhisper()
+    # else:
+    #     distil_whisper = config.STT_MODEL
+            
+    llm = LLM()
     tools, tool_descriptions = initialize_tools()
 
     # initialize new conversation metadata
-    step, conv_history, listening_mode, conversation_id = start_new_conversation()
+    step, context, listening_mode, conversation_id = start_new_conversation()
 
     while True:
         #transcribed_text, timestamp = "Test?", datetime.datetime.strptime("09/19/23 13:55:26", '%m/%d/%y %H:%M:%S') #For testing
-        transcribed_text, timestamp = get_human_input(listening_mode, stt_model=config.STT_MODEL)
+        transcribed_text, timestamp = get_human_input(listening_mode)#, stt_model=distil_whisper)
         # return to inactive mode if endword is mentioned
         if config.ENDWORD in transcribed_text.lower():
             print(config.style.MAGENTA + "Endword recognized, returning to background mode" + config.style.RESET)
@@ -266,13 +256,13 @@ def run_conversation():
 
         # fetch most recent history unless the conversation just started
         if step != 0:
-            conv_history = get_current_history()
+            context = get_current_history()
 
         # assemble the prompt
-        prompt_template, prompt_formatted = baseline_prompt(transcribed_text, conv_history=conv_history)
+        prompt_formatted = baseline_prompt(transcribed_text=transcribed_text, context=context)
 
         # get the llm response to the human input, re-record if wished and checking is enabled
-        llm_output_dict, llm_output_raw = get_llm_response(llm=llm, transcribed_text=transcribed_text, prompt=prompt_formatted)
+        llm_output_dict = get_llm_response(llm=llm, prompt=prompt_formatted, transcribed_text=transcribed_text)
         if llm_output_dict == "r":
             continue
 
@@ -282,8 +272,8 @@ def run_conversation():
             break
 
         # insert into DB
-        insert_conversation(conversation_id, step, timestamp, config.LLM_NAME, prompt_template, prompt_formatted,
-                            transcribed_text, llm_output_raw, llm_output_dict, conv_history, listening_mode)
+        insert_conversation(conversation_id, step, timestamp, config.LLM_NAME, "", prompt_formatted,
+                            transcribed_text, "", llm_output_dict, context, listening_mode)
 
         # print and play output
         print(config.style.RED + "AI: " + llm_output_dict['response'] + config.style.RESET)
